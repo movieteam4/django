@@ -54,5 +54,6 @@ class massage(models.Model):
     title=models.CharField(max_length=50)
     img=models.CharField(max_length=50)
     comment=models.TextField()
+    rating = models.IntegerField(default=0)
     class Meta:
          db_table = "massage"

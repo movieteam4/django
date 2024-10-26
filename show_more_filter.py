@@ -67,7 +67,7 @@ def filter_show(final_data,Favorite_movies_list=[],mail=False):
 
             if pd.isna(img) or img == '':
                 img='https://raw.githubusercontent.com/movieteam4/img/refs/heads/main/dog.jpg'
-            res+=f'''<div class="col-lg-3 col-md-6 align-self-center mb-30 trending-items col-md-6 {all_genre}">
+            res+=f'''<div class="col-lg-3 col-md-6 align-self-center mb-30 trending-items col-md-6 {ch_name} {all_genre}">
           <div class="item">
             <div class="thumb">
               <a href="/Taiwan_movies_all/more_detail/?m={ch_name}"><img src="{img}" alt="" width='261px' height='392px' ></a>

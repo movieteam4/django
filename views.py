@@ -19,6 +19,8 @@ from myapp.html_show import html_show
 from django.http import JsonResponse
 from django.utils import timezone
 from datetime import timedelta
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Avg
 '123111121233'
 show_data='暫無資料'
 db_config = {
@@ -181,14 +183,6 @@ def shop(request):
         from myapp.call_dataframe import call_dataframe ,week_ranking
         final_data=week_ranking(call_dataframe())
         cache.set('dataframe',final_data)  #暫存
-    # horrors_list=final_data[final_data['類型'].str.contains('恐', na=False)].sort_values(by='當周票房數', ascending=False)
-    # story_rich_list=final_data[final_data['類型'].str.contains('劇情', na=False)].sort_values(by='當周票房數', ascending=False)
-    # animation_list=final_data[(final_data['類型'].str.contains('動畫', na=False))|(final_data['類型'].str.contains('卡通',na=False))].sort_values(by='當周票房數', ascending=False)
-    # action_list=final_data[final_data['類型'].str.contains('動作', na=False)].sort_values(by='當周票房數', ascending=False)
-    # documentary_list=final_data[final_data['類型'].str.contains('紀錄', na=False)].sort_values(by='當周票房數', ascending=False)
-    # musical_list=final_data[final_data['類型'].str.contains('音樂', na=False)].sort_values(by='當周票房數', ascending=False)
-    # romance_list=final_data[final_data['類型'].str.contains('愛', na=False)].sort_values(by='當周票房數', ascending=False)
-    # my_favorite=final_data[final_data['中文片名'].isin(Favorite_movies_list)]
     from myapp.show_more_filter import filter_show
     res=filter_show(final_data,Favorite_movies_list,mail)
     return render(request,'shop.html',locals())
@@ -220,7 +214,7 @@ def Taiwan_movies_all(request):
                  Favorite_movies_list.append(movie.which_movie)
             if name=='' or name is None:
                 name='無名的遊盪者'
-            status=f''' <li><a href="https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/user_more"><i class="fas fa-user" style="font-size: 25px;" ></i><span style="font-weight: bold; color: #fff; font-size: 24px; text-transform: capitalize;">{name}</span></a></li>
+            status=f''' <li><a href="https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/user_more"><i class="fas fa-user"></i>{name}</a></li>
                         <li><a href="/Taiwan_movies_all?status=sign_out">Sign out</a></li>
                         '''
         csrf_token = csrf.get_token(request)
@@ -390,6 +384,7 @@ def more_detail(request):
     status = request.GET.get('status','')
     movie_name=request.GET.get('m','')
     check=''
+    mail=''
     if status=='Sign_out':
         if 'logged_in' in request.session:
             del request.session['logged_in']
@@ -425,7 +420,17 @@ def more_detail(request):
     cinema_group=final_data[final_data['中文片名']==movie_name].groupby('影城').count().index
     description=final_data[final_data['中文片名']==movie_name]['簡介'].iloc[0]
     youtube=final_data[final_data['中文片名']==movie_name]['youtube'].iloc[0]
-    mass_obj = massage.objects.filter(which_movie=movie_name).order_by('creat_at')
+    mass_obj = massage.objects.filter(which_movie=movie_name).exclude(what_manage="team4_star_rating").order_by('creat_at')
+    average_rating = massage.objects.filter(what_manage="team4_star_rating",which_movie=movie_name).aggregate(Avg('rating'))
+    try:
+        personal_rating=massage.objects.get(what_manage="team4_star_rating",which_movie=movie_name,mail=mail)
+        personal_rating=personal_rating.rating
+    except ObjectDoesNotExist:
+        personal_rating=''
+    if average_rating['rating__avg'] is not None:
+        average_rating=f'{average_rating["rating__avg"]:.1f}'
+    else:
+        average_rating=''
     return render(request,"more_detail.html",locals())
 
 def get_cinemas(request):
@@ -520,11 +525,13 @@ def massage123(request):
                 name=name
                 )
             new_mass.save()
+            print(new_mass.id)
             return JsonResponse({
                 'success': True,
                 'author': user.name,
                 'massage': new_mass.what_manage,
-                'created_at': '剛剛'
+                'created_at': '剛剛',
+                'id':new_mass.id
             })
 def forum(request):
     status = request.GET.get('status','')
@@ -633,3 +640,105 @@ def post(request):
         print(img)
         img=f"https://i.imgur.com/{img}"
     return render(request,"post.html",locals())
+def delete_comment(request, comment_id):
+    try:
+        # 获取指定 ID 的评论
+        comment = massage.objects.get(id=comment_id)
+        comment.delete()  # 删除评论
+        return JsonResponse({'success': True})
+    except massage.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Comment not found'})
+def edit_comment(request):
+    comment_id = request.POST.get('comment_id')
+    print(comment_id)
+    new_text=request.POST.get('new_text')
+    print(new_text)
+    mass=massage.objects.get(id=comment_id)
+    mass.what_manage=new_text
+    mass.save()
+    res=f'''<div id="comment_{mass.id}">
+              <strong>{mass.name}:</strong>
+              <p>{mass.what_manage} </p>
+              <em style="font-size: 10px; opacity: 0.7;">{mass.creat_at}</em>
+              <button onclick="deleteComment({mass.id})">刪除留言</button>
+              <button onclick="editComment({mass.id})">編輯</button>'''
+    return JsonResponse({'success': True,'res':res})
+def edit_post(request):
+    status = request.GET.get('status','')
+    detail = request.GET.get('detail','')
+    check=''
+    if status=='Sign_out':
+        if 'logged_in' in request.session:
+            del request.session['logged_in']
+            return redirect('/Taiwan_movies_all/shop/?detail=已登出')
+    if 'logged_in' in request.session:
+        mail=request.session.get('logged_in')
+        account=verifiedAccount.objects.filter(mail=mail).first()
+        name=account.name
+        if name=='' or name is None:
+            name='無名的遊盪者'
+        status='signed_in'
+    else:
+         status='signed_out'
+    if request.method =='POST':
+        # img=request.FILES.get('image')
+        # if img:
+        #     import requests
+
+        #     # Imgur API 客戶端ID
+        #     CLIENT_ID = '10ba5360e0c6073'
+
+        #     # 上傳圖片的路徑
+        #     image_path = img  # 比如 'image.jpg'
+
+
+        #     headers = {
+        #         'Authorization': f'Client-ID {CLIENT_ID}',
+        #         'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
+        #     }
+        #     url = 'https://api.imgur.com/3/upload'
+
+        #     files = {'image': img}
+        #     response = requests.post(url, headers=headers, files=files)
+
+        #     # 確保上傳成功
+        #     if response.status_code == 200:
+        #         data = response.json()
+        #         link = data['data']['link']  # 獲得圖片的 URL
+        #     else:
+        #         return redirect('https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/forum?detail=發布失敗')
+        # else:
+        #     link=''
+        edited_post=massage.objects.get(id=request.POST.get('post_id'))
+        edited_post.comment=request.POST.get('post')
+        edited_post.title=request.POST.get('title')
+        edited_post.save()
+        return redirect('https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/forum?detail=編輯成功')
+    else:
+        movie_id=request.GET.get('movie_id','')
+        post=massage.objects.get(id=movie_id)
+        return render(request,'edit_post.html',locals())
+def star(request):
+    if request.session.has_key('logged_in'):
+        mail = request.session.get('logged_in')
+    else:
+        return redirect('https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/?detail=請先登入會員')
+    try:
+        user_star = massage.objects.get(mail=mail,what_manage="team4_star_rating",which_movie=request.POST.get('movie'))
+        user_star.rating=request.POST.get('rating')
+        user_star.save()
+    except ObjectDoesNotExist:
+        new_star=massage.objects.create(
+            what_manage="team4_star_rating",
+            mail=mail,
+            rating=request.POST.get('rating'),
+            which_movie=request.POST.get('movie'),
+            creat_at=timezone.now()
+        )
+        new_star.save()
+    average_rating = massage.objects.filter(what_manage="team4_star_rating",which_movie=request.POST.get('movie')).aggregate(Avg('rating'))
+    print(average_rating['rating__avg'])
+    return JsonResponse({
+            'success': True,
+            'average_rating':f"{average_rating['rating__avg']:.1f}"
+        })
