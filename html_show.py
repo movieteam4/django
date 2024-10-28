@@ -1,6 +1,7 @@
 from django.templatetags.static import static
 import pandas as pd
 from myapp.models import Favorite
+import re
 def html_show(final_data,Favorite_movies_list=[],mail=False):
     # 初始化HTML表格
     movie_list = final_data.groupby('中文片名').count().index
@@ -27,7 +28,9 @@ def html_show(final_data,Favorite_movies_list=[],mail=False):
         if pd.isna(img_url):
             img_url =static('dog.jpg')
             show_more=static('show_more.png')
-
+        # ch_name=re.sub(r'[^0-9a-zA-Z\u4e00-\u9fa5]', '', ch_name)
+        if ch_name =="辣手警探2":
+            genre='動作、犯罪'
         res += f'''<div class="col-lg-3 col-md-6">
             <div class="item">
               <div class="thumb">

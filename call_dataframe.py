@@ -355,26 +355,28 @@ def month_ranking(final_data):
     # final_data = final_data[['中文片名',"當周金額","當周票房數","總金額","總票房"]].sort_values(by='當周票房數', ascending=False).head(10)
     return final_data
 def address():
-    import mysql.connector
+    # import mysql.connector
     import pandas as pd
-    db_config = {
-        'host': 'u3r5w4ayhxzdrw87.cbetxkdyhwsb.us-east-1.rds.amazonaws.com',
-        'user': 'dhv81sqnky35oozt',
-        'password': 'rrdv8ehsrp8pdzqn',
-        'database': 'xltc236odfo1enc9',
-        'charset': 'utf8mb4'
-    }
-    connection = mysql.connector.connect(**db_config)
-    if connection.is_connected():
-        print("成功連接到 MariaDB 資料庫")
-    cursor=connection.cursor()
-    # data=pd.read_csv('臺灣地區32碼郵遞區號.csv')
-    # data=data.to_html(classes='table table-striped', index=False).replace(r"'",'’')
-    cursor.execute('SELECT * FROM address')
-    result=cursor.fetchall()
-    res=result[0][0]
-    df=pd.read_html(res)[0]
+    # db_config = {
+    #     'host': 'u3r5w4ayhxzdrw87.cbetxkdyhwsb.us-east-1.rds.amazonaws.com',
+    #     'user': 'dhv81sqnky35oozt',
+    #     'password': 'rrdv8ehsrp8pdzqn',
+    #     'database': 'xltc236odfo1enc9',
+    #     'charset': 'utf8mb4'
+    # }
+    # connection = mysql.connector.connect(**db_config)
+    # if connection.is_connected():
+    #     print("成功連接到 MariaDB 資料庫")
+    # cursor=connection.cursor()
+    # # data=pd.read_csv('臺灣地區32碼郵遞區號.csv')
+    # # data=data.to_html(classes='table table-striped', index=False).replace(r"'",'’')
+    # cursor.execute('SELECT * FROM address')
+    # result=cursor.fetchall()
+    # res=result[0][0]
+    # df=pd.read_html(res)[0]
+    df=pd.read_csv('https://github.com/movieteam4/style/raw/refs/heads/main/taiwan_address.csv',encoding='utf-8-sig')
     return df
+
 # che=call_dataframe()
 # che2 = che[che['電影院名稱'].str.contains('威秀')]
 

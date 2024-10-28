@@ -2,6 +2,7 @@ def filter_show(final_data,Favorite_movies_list=[],mail=False):
     from django.templatetags.static import static
     from django.urls import reverse
     import pandas as pd
+    import re
     genre_list=['all','horror','story_rich','animation','action','documentary','musical','romance','my_favorite']
     res=''
     form_action_url = reverse('product_details')
@@ -15,6 +16,8 @@ def filter_show(final_data,Favorite_movies_list=[],mail=False):
             img=i['宣傳照'].iloc[i2]
             ch_name=i['中文片名'].iloc[i2]
             check=''
+            if ch_name=='試測勿購':
+                continue
             if ch_name in Favorite_movies_list:
                 check='checked'
             if ch_name in che:
@@ -67,6 +70,10 @@ def filter_show(final_data,Favorite_movies_list=[],mail=False):
 
             if pd.isna(img) or img == '':
                 img='https://raw.githubusercontent.com/movieteam4/img/refs/heads/main/dog.jpg'
+            # ch_name=re.sub(r'[^0-9a-zA-Z\u4e00-\u9fa5]', '', ch_name)
+            if ch_name =="辣手警探2":
+                genre='動作、犯罪'
+
             res+=f'''<div class="col-lg-3 col-md-6 align-self-center mb-30 trending-items col-md-6 {ch_name} {all_genre}">
           <div class="item">
             <div class="thumb">

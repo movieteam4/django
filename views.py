@@ -1,4 +1,4 @@
-from myapp.models import Dreamreal,createAccount,verifiedAccount,Favorite,massage
+from myapp.models import Dreamreal,createAccount,verifiedAccount,Favorite,massage,user_liked
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.core.mail import send_mail
@@ -21,6 +21,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Avg
+from django.db import IntegrityError
 '123111121233'
 show_data='暫無資料'
 db_config = {
@@ -37,55 +38,55 @@ def search(request):
     return redirect(f'https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/more_detail/?m={m}')
 def user_more(request):
     if request.method =='POST':
-        from myapp.call_dataframe import address # 從 call_dataframe 中匯入 address 方法以取得地址資訊
-        df=address() # 呼叫 address 方法並將其回傳結果存入 df
-        dict_road = {} # 初始化一個空字典以存儲每個鄉鎮的街路聚落名稱
-        dict_town = {} # 初始化一個空字典以存儲縣市中的鄉鎮市區名稱
-        same_list=[] # 初始化一個空清單以避免重複的鄉鎮名稱
-        list_city = ['選擇縣市']+list(df["縣市名稱"].unique()) # 取得所有縣市的名稱並加上 '選擇縣市' 選項
-        # 讀取所有縣市並分組存入 dict_town 和 dict_road
+        df = cache.get('address')
+        if df is None:
+            print('沒有暫存')
+            from myapp.call_dataframe import address
+            df=address()
+            cache.set('address',df)
+        else:
+            print('找到了暫存')
+        dict_road = {}
+        dict_town = {}
+        same_list=[]
+        list_city = list(df["縣市名稱"].unique())
+        # 讀取所有縣市
         for city_name in list_city:
-            dict_town[city_name] = list(df[(df["縣市名稱"] == city_name)]["鄉鎮市區"].unique()) # 根據縣市名稱取得所有鄉鎮市區名稱並存入 dict_town
+            dict_town[city_name] = list(df[(df["縣市名稱"] == city_name)]["鄉鎮市區"].unique())
             for n,town_name in enumerate(dict_town[city_name]):
-                if town_name in same_list: # 若鄉鎮名稱已在 same_list 中，避免重複
-                    town_name=city_name[:-1]+town_name # 以縣市名稱的部分字母拼接區分鄉鎮名稱
-                    dict_town[city_name][n]=town_name # 更新 dict_town 的鄉鎮名稱
-                    dict_road[town_name] = list(df[(df["縣市名稱"] == city_name) & (df["鄉鎮市區"] == town_name[2:])]["街路聚落名稱"].unique()) # 存入街路聚落名稱
+                if town_name in same_list:
+                    town_name=city_name[:-1]+town_name
+                    dict_town[city_name][n]=town_name
+                    dict_road[town_name] = list(df[(df["縣市名稱"] == city_name) & (df["鄉鎮市區"] == town_name[2:])]["街路聚落名稱"].unique())
                 else:
-                    dict_road[town_name] = list(df[(df["縣市名稱"] == city_name) & (df["鄉鎮市區"] == town_name)]["街路聚落名稱"].unique()) # 直接存入街路聚落名稱
-                same_list.append(town_name) # 加入同名鄉鎮至 same_list 避免重複
-        # 從 POST 請求中取得使用者資料
-        mail=request.POST.get('email_address') # 取得使用者的電子郵件地址
-        account = verifiedAccount.objects.get(mail=mail) # 根據郵件地址從 verifiedAccount 資料表中查找使用者
-        account.name=request.POST.get('name') # 更新使用者名稱
-        # 取得使用者生日，並處理日期格式
+                    dict_road[town_name] = list(df[(df["縣市名稱"] == city_name) & (df["鄉鎮市區"] == town_name)]["街路聚落名稱"].unique())
+                same_list.append(town_name)
+        mail=request.POST.get('email_address')
+        account = verifiedAccount.objects.get(mail=mail)
+        account.name=request.POST.get('name')
         if request.POST.get('date_of_birth'):
             try:
-                account.date_of_birth=request.POST.get('date_of_birth') # 直接設定生日
+                account.date_of_birth=request.POST.get('date_of_birth')
             except:
-                account.date_of_birth=datetime.strptime(request.POST.get('date_of_birth'),'%Y-%m-%d') # 若出現錯誤，將日期格式轉換
-        # 取得其他使用者資料
-        account.mobile_phone=request.POST.get('mobile_phone') # 取得手機號碼
-        account.national_id=request.POST.get('national_id') # 取得身分證字號
-        account.occupation=request.POST.get('occupation') # 取得職業
-        account.favorite_cinema=request.POST.get('favorite_cinema') # 取得最常去的影城
-        account.marital_status=request.POST.get('marital_status') # 取得婚姻狀況
-        account.household_income=request.POST.get('household_income') # 取得年收入
-        account.gender=request.POST.get('sex') # 取得性別
-        account.education=request.POST.get('education') # 取得教育程度
-        account.favorite_genres=request.POST.getlist('f_genres') # 取得使用者喜愛的電影類型
-        account.preferences=request.POST.getlist('seat') # 取得使用者座位偏好
-        # 設定使用者的完整地址
+                account.date_of_birth=datetime.strptime(request.POST.get('date_of_birth'),'%Y-%m-%d')
+        account.mobile_phone=request.POST.get('mobile_phone')
+        account.national_id=request.POST.get('national_id')
+        account.occupation=request.POST.get('occupation')
+        account.favorite_cinema=request.POST.get('favorite_cinema')
+        account.marital_status=request.POST.get('marital_status')
+        account.household_income=request.POST.get('household_income')
+        account.gender=request.POST.get('sex')
+        account.education=request.POST.get('education')
+        account.favorite_genres=request.POST.getlist('f_genres')
+        account.preferences=request.POST.getlist('seat')
         try:
             account.address=request.POST.get('city')+request.POST.get('district')+request.POST.get('road')+request.POST.get('address')
         except:
             pass
-        # 保存資料並確認
         detail='資料輸入完成'
-        account.save() # 儲存使用者資料
-        mail=request.session['logged_in'] # 取得使用者登入的 session 資料
-        account=verifiedAccount.objects.get(mail=mail) # 根據登入的 session 查找帳戶
-        # 將帳戶資料傳遞給模板
+        account.save()
+        mail=request.session['logged_in']
+        account=verifiedAccount.objects.get(mail=mail)
         name=account.name
         date_of_birth=str(account.date_of_birth)
         mobile_phone=account.mobile_phone
@@ -98,25 +99,24 @@ def user_more(request):
         sex=account.gender
         education=account.education
         favorite_genres=account.favorite_genres
-        print(favorite_genres) # 輸出喜愛的電影類型
+        print(favorite_genres)
         seat=account.preferences
-        print(seat) # 輸出座位偏好
-        return render(request,'user_more.html',locals()) # 渲染並返回模板 'user_more.html'
-    # 若使用者已登入
+        print(seat)
+        return render(request,'user_more.html',locals())
+
     if 'logged_in' in request.session:
-        df = cache.get('address') # 從快取中取得地址資料
+        df = cache.get('address')
         if df is None:
             print('沒有暫存')
             from myapp.call_dataframe import address
-            df=address() # 呼叫 address 方法取得地址資料
-            cache.set('address',df) # 將地址資料存入快取
+            df=address()
+            cache.set('address',df)
         else:
             print('找到了暫存')
-        # 讀取並組織縣市、鄉鎮、市區資料
         dict_road = {}
         dict_town = {}
         same_list=[]
-        list_city = ['選擇縣市']+list(df["縣市名稱"].unique())
+        list_city = list(df["縣市名稱"].unique())
         # 讀取所有縣市
         for city_name in list_city:
             dict_town[city_name] = list(df[(df["縣市名稱"] == city_name)]["鄉鎮市區"].unique())
@@ -128,7 +128,6 @@ def user_more(request):
                 else:
                     dict_road[town_name] = list(df[(df["縣市名稱"] == city_name) & (df["鄉鎮市區"] == town_name)]["街路聚落名稱"].unique())
                 same_list.append(town_name)
-        # 查找使用者並將資料傳遞給模板
         mail=request.session['logged_in']
         account=verifiedAccount.objects.get(mail=mail)
         name=account.name
@@ -144,9 +143,9 @@ def user_more(request):
         favorite_genres=account.favorite_genres
         seat=account.preferences
         education=account.education
-        return render(request,'user_more.html',locals()) # 渲染並返回模板 'user_more.html'
+        return render(request,'user_more.html',locals())
     else:
-        return redirect('https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/?detail=請先登入會員') # 若未登入，重定向到登入頁面
+        return redirect('https://taiwan-movies-36c4c3ac2ec6.herokuapp.com/Taiwan_movies_all/?detail=請先登入會員')
 def Line(request):
     return render(request,'Line.html',locals())
 def initialise(request):
@@ -249,6 +248,7 @@ def Taiwan_movies_all(request):
         number_1_name=final_data['中文片名'].iloc[0]
         number_1_name_eng=final_data['英文片名'].iloc[0]
         description=description[:len(description)//3]+'...'
+        # number_1_name=re.sub(r'[^0-9a-zA-Z\u4e00-\u9fa5]', '', number_1_name)
         return render(request,'Taiwan_movie_all.html', locals())
     else:
         status='''<li><a href="/signin">Sign in</a></li>'''
@@ -266,6 +266,7 @@ def Taiwan_movies_all(request):
             number_1_name_eng=final_data['英文片名'].iloc[0]
             description=description[:len(description)//3]+'...'
             cache.set('dataframe',final_data)
+            # number_1_name=re.sub(r'[^0-9a-zA-Z\u4e00-\u9fa5]', '', number_1_name)
             return render(request,'Taiwan_movie_all.html', locals())
         print('沒有暫存,要重新加載資料庫')
         from myapp.call_dataframe import call_dataframe ,week_ranking
@@ -389,45 +390,54 @@ def favorite_page(request):
 def about_us(request):
     return render(request,'about_us.html')
 def more_detail(request):
-    status = request.GET.get('status','') #設定status值，沒有則設空值
-    movie_name=request.GET.get('m','') #設定電影名稱值，沒有則設空值
-    check='' #設定是否為收藏電影
-    if status=='Sign_out': #檢查status是否正在執行登出
-        if 'logged_in' in request.session: #檢查session是否為登入狀態
-            del request.session['logged_in'] #刪除session中的logged_in項目使帳號呈現登出
-            return redirect('/Taiwan_movies_all/shop/?detail=已登出') #跳至登出頁面
-    if 'logged_in' in request.session: #檢查session是否為登入狀態
-        mail=request.session.get('logged_in') #檢查session中的logged_in儲存到變數mail中
-        account=verifiedAccount.objects.filter(mail=mail).first() #將身分資料庫中對應mail變數的值取出存入account變數中
-        name=account.name #取出account中的name值存入name變數中
-        favorite=Favorite.objects.filter(mail=mail,which_movie= movie_name ).first() #查詢本會員在最愛資料庫中是否儲存本電影
-        if favorite: #若favorite內有本電影
-            check='checked' #將check從''改為'checked'，表示已收藏
-        if name=='' or name is None: #假如變數name為空值或是none
-            name='無名的遊盪者' #將name變數改成'無名的遊盪者'
-        status='signed_in' #使用者為登入狀態
+    status = request.GET.get('status','')
+    movie_name=request.GET.get('m','')
+    check=''
+    mail=''
+    if status=='Sign_out':
+        if 'logged_in' in request.session:
+            del request.session['logged_in']
+            return redirect('/Taiwan_movies_all/shop/?detail=已登出')
+    if 'logged_in' in request.session:
+        mail=request.session.get('logged_in')
+        account=verifiedAccount.objects.filter(mail=mail).first()
+        name=account.name
+        favorite=Favorite.objects.filter(mail=mail,which_movie= movie_name ).first()
+        if favorite:
+            check='checked'
+        if name=='' or name is None:
+            name='無名的遊盪者'
+        status='signed_in'
     else:
-         status='signed_out' #使用者為登出狀態
-    csrf_token = csrf.get_token(request) #獲取 CSRF token，防止跨站請求偽造攻擊
-    final_data = cache.get('more_detail') #從快取中獲取'more_detail'的資料，如果有的話直接使用，避免重複查詢。
-    if final_data is None: #若final_data未從快取中獲得
-        from myapp.call_dataframe import call_dataframe #從call_dataframe中獲得電影資訊final_data
-        final_data=call_dataframe() #將call_dataframe中的final_data存入變數final_data中
-        cache.set('more_detail',final_data) #將final_data的值暫存入more_detail中
-        # cinema_list = final_data[final_data['中文片名']==movie_name].groupby('電影院名稱').count().index  #取得宣傳照網址
-        img=final_data[final_data['中文片名']==movie_name]['宣傳照'].iloc[0] #取得宣傳照網址
-        actors=final_data[final_data['中文片名']==movie_name]['演員'].iloc[0] #取得演員
-        if pd.isna(actors) or actors =='': #假如演員為空值
-        actors = "沒有演員" #顯示'沒有演員'
-    director=final_data[final_data['中文片名']==movie_name]['導演'].iloc[0] #取得導演
-    if pd.isna(director) or director=='': #假如導演為空值
-        director = "沒有導演" #顯示'沒有導演'
-    eng_name=final_data[final_data['中文片名']==movie_name]['英文片名'].iloc[0] #取得英文片名
-    release_date=final_data[final_data['中文片名']==movie_name]['上映日'].iloc[0] #取得上映日
-    cinema_group=final_data[final_data['中文片名']==movie_name].groupby('影城').count().index #將資料按「影城」進行分組，獲取該電影放映的影城列表。
-    description=final_data[final_data['中文片名']==movie_name]['簡介'].iloc[0] #取得電影簡介
-    youtube=final_data[final_data['中文片名']==movie_name]['youtube'].iloc[0] #取得youtube預告片連結
-    mass_obj = massage.objects.filter(which_movie=movie_name).exclude(what_manage="team4_star_rating").order_by('creat_at') #從massage資料庫中查詢與該電影相關的留言，並按創建時間排序。
+         status='signed_out'
+    csrf_token = csrf.get_token(request)
+    final_data = cache.get('more_detail')
+    if final_data is None:
+        from myapp.call_dataframe import call_dataframe
+        final_data=call_dataframe()
+        cache.set('more_detail',final_data)  #暫存
+    # cinema_list = final_data[final_data['中文片名']==movie_name].groupby('電影院名稱').count().index
+    img=final_data[final_data['中文片名']==movie_name]['宣傳照'].iloc[0]
+    actors=final_data[final_data['中文片名']==movie_name]['演員'].iloc[0]
+    if pd.isna(actors) or actors =='':
+        actors = "沒有演員"
+    director=final_data[final_data['中文片名']==movie_name]['導演'].iloc[0]
+    if pd.isna(director) or director=='':
+        director = "沒有導演"
+    eng_name=final_data[final_data['中文片名']==movie_name]['英文片名'].iloc[0]
+    release_date=final_data[final_data['中文片名']==movie_name]['上映日'].iloc[0]
+    release_date=re.sub(r'\D', '', release_date)
+    release_date=release_date[:4]+'-'+release_date[4:6]+'-'+release_date[6:]
+    cinema_group=final_data[final_data['中文片名']==movie_name].groupby('影城').count().index
+    description=final_data[final_data['中文片名']==movie_name]['簡介'].iloc[0]
+    youtube=final_data[final_data['中文片名']==movie_name]['youtube'].iloc[0]
+    mass_obj = massage.objects.filter(which_movie=movie_name).exclude(what_manage="team4_star_rating").order_by('creat_at')
+    liked = user_liked.objects.filter(mail=mail)
+    liked_list=[]
+    for i in liked:
+        liked_list.append(int(i.which_id))
+        print(type(i.which_id))
+    print(liked_list)
     average_rating = massage.objects.filter(what_manage="team4_star_rating",which_movie=movie_name).aggregate(Avg('rating'))
     try:
         personal_rating=massage.objects.get(what_manage="team4_star_rating",which_movie=movie_name,mail=mail)
@@ -438,7 +448,14 @@ def more_detail(request):
         average_rating=f'{average_rating["rating__avg"]:.1f}'
     else:
         average_rating=''
-    return render(request,"more_detail.html",locals()) #將所有變數傳遞給模板more_detail.html進行渲染。
+    # movie_name=re.sub(r'[^\u4e00-\u9fa5]', '', movie_name)
+    if movie_name =="辣手警探2":
+        release_date='2024-10-18'
+        actors='黃晸珉、吳達洙、張允柱、吳代煥、金時厚、丁海寅'
+        director='柳承完'
+
+    return render(request,"more_detail.html",locals())
+
 def get_cinemas(request):
     final_data = cache.get('more_detail')
     if final_data is None:
@@ -537,7 +554,8 @@ def massage123(request):
                 'author': user.name,
                 'massage': new_mass.what_manage,
                 'created_at': '剛剛',
-                'id':new_mass.id
+                'id':new_mass.id,
+                'init_like':0
             })
 def forum(request):
     status = request.GET.get('status','')
@@ -748,3 +766,58 @@ def star(request):
             'success': True,
             'average_rating':f"{average_rating['rating__avg']:.1f}"
         })
+def tomato(request):
+    from myapp.tomato import get_tomatos,simplify_release_date
+    release_date=simplify_release_date(request.POST.get('release_date'))[:4]
+    print(release_date)
+    eng_movie=request.POST.get('eng_movie')
+    print(eng_movie)
+    score=f"🍅 爛番茄指數為{get_tomatos(eng_movie,release_date)}"
+    if get_tomatos(eng_movie,release_date)=='%' or get_tomatos(eng_movie,release_date)=='':
+         score='🍅 尚未有爛番茄指數'
+    return JsonResponse({
+            'success': True,
+            'score': score
+        })
+
+def massage_like(request):
+    if request.method =='POST':
+        try:
+            #登錄才有session
+            if request.session.has_key('logged_in'):
+                #抓session確定是哪個用戶
+                e_mail=request.session.get('logged_in')
+                user=verifiedAccount.objects.get(mail=e_mail)
+                comment_id = request.POST.get('commentId')
+                isLiked = request.POST.get('isLiked')
+                mail=request.POST.get('mail')
+                print(comment_id)
+                if isLiked =='true':
+                    comment = massage.objects.get(id=comment_id)
+                    comment.like_count+=1
+                    comment.save()
+                    try:
+                        liked=user_liked.objects.create(mail=mail,which_id=comment_id)
+                    except IntegrityError:
+                        print("This entry already exists.")
+
+                else:
+                    comment = massage.objects.get(id=comment_id)
+                    comment.like_count-=1
+                    comment.save()
+                    try:
+                        liked = user_liked.objects.get(mail=mail, which_id=comment_id)
+                        liked.delete()
+                    except ObjectDoesNotExist:
+                        print("This entry does not exist.")
+
+                # 返回新的點讚數量
+                print(comment.like_count)
+                return JsonResponse({'success': True, 'new_like_count': comment.like_count})
+
+            else:
+                return HttpResponse('用戶未登錄')
+        except massage.DoesNotExist:
+            return JsonResponse({'error': '找不到該評論'}, status=404)
+        except verifiedAccount.DoesNotExist:
+            return JsonResponse({'error': '找不到用戶'}, status=404)

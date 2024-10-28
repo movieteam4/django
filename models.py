@@ -55,5 +55,12 @@ class massage(models.Model):
     img=models.CharField(max_length=50)
     comment=models.TextField()
     rating = models.IntegerField(default=0)
+    like_count = models.IntegerField(default=0)
     class Meta:
          db_table = "massage"
+class user_liked(models.Model):
+        mail = models.CharField(max_length=50)
+        which_id= models.CharField(max_length=100)
+        class Meta:
+            db_table = "user_liked"
+            unique_together = ('mail', 'which_id')
